@@ -181,17 +181,14 @@ class PandaFile(object):
 		return self.closed
 
 	def read(self, size=1):
-		q = panda.physical_memory_read(self.pos,size)
+		data = panda.physical_memory_read(self.pos,size)
 		self.pos += size
-		maxsize = min(size,100)
-	#	print("read @"+hex(self.pos-size)+" "+hex(size) + " "+str(q)[0:maxsize])
-		return q
+		return data
 	
 	def peek(self, size=1):
 		return panda.physical_memory_read(self.pos, size)
 
 	def seek(self, pos, whence=0):
-	#	print("seek "+hex(pos)+" whence= "+str(whence))
 		if whence == 0:
 			self.pos = pos
 		elif whence == 1:
@@ -205,57 +202,9 @@ class PandaFile(object):
 	def close(self):
 		self.closed = True
 	
-	def closed(self):
-		return self.closed
-
-	def detach(self):
-		pdb.set_trace()
-
-	def fileno(self):
-		pdb.set_trace()
-	
-	def flush(self):
-		pdb.set_trace()
-
-	def isatty(self):
-		pdb.set_trace()
-
-	def raw(self):
-		pdb.set_trace()
-	
-	def read1(self,a=-1):
-		pdb.set_trace()
-	
-	def readinto(self, q):
-		pdb.set_trace()
-
-	def readinto1(self, q):
-		pdb.set_trace()
-	
-	def readline(self, size=-1):
-		pdb.set_trace()
-
-	def readlines(self, hint=None):
-		pdb.set_trace()
-	
-	def seekable(self):
-		return True
-	
-	def truncate(self,pos=None):
-		pdb.set_trace()
-		
-	def writable(self):
-		pdb.set_trace()
-		
-	def write(self,b):
-		pdb.set_trace()
-	
-	def writelines(self, lines):
-		pdb.set_trace()
 
 class FileHandler(urllib.request.BaseHandler):
 	def default_open(self, req):
-#		print("got default open with "+req.full_url)
 		if 'panda.panda' in req.full_url:
 			length = panda.libpanda.ram_size
 			if length > 0xc0000000:
@@ -264,7 +213,6 @@ class FileHandler(urllib.request.BaseHandler):
 		else:
 			return None
 	def file_open(self, req):
-#		print("got file_open with "+req.full_url)
 		if 'panda.panda' in req.full_url:
 			length = panda.libpanda.ram_size
 			if length > 0xc0000000:
@@ -273,7 +221,6 @@ class FileHandler(urllib.request.BaseHandler):
 		else:
 			return None
 	def file_close(self):
-#		print("filehandler:close()")
 		return True
 
 class PrintedProgress(object):
@@ -481,6 +428,7 @@ class CommandLine(interfaces.plugins.FileConsumerInterface):
 		self.populate_config(ctx, configurables_list, args, plugin_config_path)
 
 		if args.extend:
+			pdb.set_trace()
 			for extension in args.extend:
 				if '=' not in extension:
 					raise ValueError("Invalid extension (extensions must be of the format \"conf.path.value='value'\")")
@@ -499,6 +447,7 @@ class CommandLine(interfaces.plugins.FileConsumerInterface):
 			if args.quiet:
 				progress_callback = MuteProgress()
 
+			pdb.set_trace()
 			constructed = plugins.construct_plugin(ctx, automagics, plugin, base_config_path, progress_callback, self)
 		#	return (ctx, automagics, plugin, base_config_path, progress_callback, self)
 
@@ -572,6 +521,7 @@ class CommandLine(interfaces.plugins.FileConsumerInterface):
 						config_path = plugin_config_path
 					extended_path = interfaces.configuration.path_join(config_path, requirement.name)
 					context.config[extended_path] = value
+					pdb.set_trace()
 
 	def consume_file(self, filedata: interfaces.plugins.FileInterface):
 		"""Consumes a file as produced by a plugin."""
@@ -598,6 +548,7 @@ class CommandLine(interfaces.plugins.FileConsumerInterface):
 			parser: The parser to add the plugin's (simple) requirements to
 			configurable: The plugin object to pull the requirements from
 		"""
+		pdb.set_trace()
 		if not issubclass(configurable, interfaces.configuration.ConfigurableInterface):
 			raise TypeError("Expected ConfigurableInterface type, not: {}".format(type(configurable)))
 
@@ -690,37 +641,6 @@ vmlinux_original = None
 
 total_time = 0
 number_runs = 0
-
-#@panda.cb_asid_changed()
-def on_asid_change2(env, old_asid, new_asid):
-	global oldtime, timechange, constructed, plugin, total_time, number_runs, construction_equipment, construction_equipment_original, constructed_original, vmlinux, vmlinux_original
-	if time() - oldtime > timechange:
-		pdb.set_trace()
-		oldtime = time()
-	return 0
-
-
-def compare_objects(a,b):
-	for c,d in zip(dir(a),dir(b)):
-		try:
-			i = getattr(a,c)
-			j = getattr(b,d)
-			
-			if 'method' in str(type(i)) or i is None or isinstance(i,str):
-				continue
-
-			if hasattr(i,"__hash__") and hasattr(j,"__hash__"):
-				if i.__hash__() != j.__hash__():
-					print(str(i) + " hashes disagree" + str(type(i)))
-					compare_objects(i,j)
-				else:
-					print(str(i) + " hashes agree" + str(type(i)))
-			elif i != j:
-				pdb.set_trace()
-			else:
-				print(str(i) + " and "+ str(j) +" agree")
-		except:
-			print("tried comparing {} did not go well".format(c))
 
 @panda.cb_asid_changed()
 def on_asid_change(env, old_asid, new_asid):

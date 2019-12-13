@@ -14,54 +14,67 @@ from volatility.framework.automagic import linux
 from volatility.framework.layers.linear import LinearlyMappedLayer
 from volatility.framework.objects import utility
 
-class PandaFile(object):
-	def __init__(self,length):
-		self.pos = 0
-		self.length = length
-		self.closed = False
-		self.mode = "rb"
-		self.name = "/tmp/panda.panda"
-
-	def readable(self):
-		return self.closed
-
-	def read(self, size=1):
-		data = panda.physical_memory_read(self.pos,size)
-		self.pos += size
-		return data
 	
-	def peek(self, size=1):
-		return panda.physical_memory_read(self.pos, size)
+'''
+Constructs a file and file handler that volatility can't ignore to back by PANDA physical memory
+'''
+def make_panda_file_handler(panda):
+	class PandaFile(object):
+		def __init__(self,length, panda):
+			self.pos = 0
+			self.length = length
+			self.closed = False
+			self.mode = "rb"
+			self.name = "/tmp/panda.panda"
+			self.panda = panda
+	
+		def readable(self):
+			return self.closed
+	
+		def read(self, size=1):
+			data = self.panda.physical_memory_read(self.pos,size)
+			self.pos += size
+			return data
+		
+		def peek(self, size=1):
+			return self.panda.physical_memory_read(self.pos, size)
+	
+		def seek(self, pos, whence=0):
+			if whence == 0:
+				self.pos = pos
+			elif whence == 1:
+				self.pos += pos
+			else:
+				self.pos = self.length - pos
+	
+		def tell(self):
+			return self.pos
+	
+		def close(self):
+			self.closed = True
 
-	def seek(self, pos, whence=0):
-		if whence == 0:
-			self.pos = pos
-		elif whence == 1:
-			self.pos += pos
-		else:
-			self.pos = self.length - pos
-
-	def tell(self):
-		return self.pos
-
-	def close(self):
-		self.closed = True
+	class PandaFileHandler(BaseHandler):
+		def default_open(self, req):
+			if 'panda.panda' in req.full_url:
+				length = panda.libpanda.ram_size
+				if length > 0xc0000000:
+					length += 0x40000000
+				return PandaFile(length=length, panda=panda)
+			else:
+				return None
+		def file_close(self):
+			return True
+	
+	globals()["PandaFileHandler"] = PandaFileHandler
 	
 
-class FileHandler(BaseHandler):
-	def default_open(self, req):
-		if 'panda.panda' in req.full_url:
-			length = panda.libpanda.ram_size
-			if length > 0xc0000000:
-				length += 0x40000000
-			return PandaFile(length=length)
-		else:
-			return None
-	def file_close(self):
-		return True
 
+'''
+We are faking running this from the command line and running this programmatically.
 
-
+Why? Because it's easier to do it this way than ask the people at volatility to modify
+their project.
+'''
 class CommandLine(interfaces.plugins.FileConsumerInterface):
 	"""Constructs a command-line interface object for users to run plugins."""
 
@@ -110,9 +123,10 @@ class CommandLine(interfaces.plugins.FileConsumerInterface):
 
 _vmlinux = None
 
-def give_vmlinux():
+def volatility_symbols(panda):
 	global _vmlinux
 	if not _vmlinux:
+		make_panda_file_handler(panda)
 		constructed_original = CommandLine().run()
 		linux.LinuxUtilities.aslr_mask_symbol_table(constructed_original.context, constructed_original.config['vmlinux'], constructed_original.config['primary'])
 		_vmlinux = contexts.Module(constructed_original.context, constructed_original.config['vmlinux'],constructed_original.config['primary'], 0)
@@ -120,40 +134,4 @@ def give_vmlinux():
 		LinearlyMappedLayer.read.cache_clear()		
 	return _vmlinux
 
-arch = "x86_64" if len(argv) <= 1 else argv[1]
-extra = "-nographic -chardev socket,id=monitor,path=./monitor.sock,server,nowait -monitor chardev:monitor -serial telnet:127.0.0.1:4444,server,nowait  -device e1000,netdev=net0 -netdev user,id=net0,hostfwd=tcp::5555-:22 -cdrom /home/luke/workspace/qcows/instance-1-cidata.iso"
-qcow = "/home/luke/workspace/qcows/instance-1.qcow2"
-panda = Panda(arch=arch,qcow=qcow,extra_args=extra,mem="1G")
-
-timechange = 5
-oldtime = time()
-
-total_time, number_runs = 0,0 
-
-@panda.cb_asid_changed()
-def on_asid_change(env, old_asid, new_asid):
-	global oldtime, timechange, total_time, number_runs
-	if time() - oldtime > timechange:
-		a = time()
-		vmlinux = give_vmlinux()
-		init_task = vmlinux.object_from_symbol(symbol_name = "init_task")
-		out = [(task.pid,task.parent.pid,utility.array_to_string(task.comm)) for task in init_task.tasks if task.pid]
-		ran_in = time() - a
-		total_time += ran_in
-		number_runs += 1
-		print("ran in "+str(ran_in) +" seconds")
-		print("average of "+str(total_time/number_runs) +" for "+str(number_runs))
-		print(out)
-		print(len(out))
-		pdb.set_trace()
-		oldtime = time()
-		timechange = 15
-	return 0
-
-@blocking
-def init():
-	panda.revert("cmdline")
-
-panda.queue_async(init)
-panda.run()
 
